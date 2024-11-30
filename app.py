@@ -6,6 +6,8 @@ from image_generater import ImageGenerator, GardenPrompts
 from github_connector import get_github_contributions
 import urllib.parse
 
+
+
 # 環境変数の読み込み
 load_dotenv()
 
@@ -66,7 +68,7 @@ def main(page: ft.Page):
             result_image_url = generate_garden(last_contribution_count, date)
             
             # 生成された画像のローカルパスを作成
-            image_path = f"/Users/hattorihyuma/Desktop/projects/植物inflet/images/generated_image_{date}.png"
+            image_path = os.path.join(os.path.dirname(__file__), "images", f"generated_image_{date}.png")
             current_image_path = image_path  # パスを保存
             
             # 新しい画像コンポーネントを作成

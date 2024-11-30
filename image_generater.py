@@ -46,7 +46,8 @@ class ImageGenerator:
         # 画像をダウンロードして保存
         response = requests.get(url)
         if response.status_code == 200:
-            image_path = os.path.join("/Users/hattorihyuma/Desktop/projects/植物inflet/images", filename)
+            # 相対パスを使用して画像を保存
+            image_path = os.path.join(os.path.dirname(__file__), "images", filename)
             with open(image_path, 'wb') as f:
                 f.write(response.content)
             print(f"Image saved to {image_path}")

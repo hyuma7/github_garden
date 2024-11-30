@@ -1,6 +1,7 @@
 import os
 import requests
 
+
 def fetch_github_contributions(user_name):
     url = "https://api.github.com/graphql"
     headers = {
@@ -32,6 +33,7 @@ def fetch_github_contributions(user_name):
     else:
         raise Exception(f"Query failed to run by returning code of {response.status_code}. {response.text}")
 
+
 def get_github_user_name():
     url = "https://api.github.com/graphql"
     headers = {
@@ -50,10 +52,9 @@ def get_github_user_name():
     else:
         raise Exception(f"Query failed to run by returning code of {response.status_code}. {response.text}")
 
+
 def get_github_contributions():
     user_name = get_github_user_name()
     response = fetch_github_contributions(user_name)
     return response
 
-if __name__ == "__main__":
-    print(get_github_contributions())
