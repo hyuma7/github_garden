@@ -1,166 +1,151 @@
 import flet as ft
 import webbrowser
 from dotenv import load_dotenv
-import os
-from image_generater import ImageGenerator, GardenPrompts
+from image_generator import ImageGenerator, GardenPrompts
 from github_connector import get_github_contributions
 import urllib.parse
+import logging
+import os
+from datetime import datetime
 
+# ロギングの設定
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+log_file = os.path.join(log_dir, f"app_{datetime.now().strftime('%Y%m%d')}.log")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # 環境変数の読み込み
 load_dotenv()
+logger.info("Environment variables loaded")
 
-def generate_garden(last_contribution_count, date) -> str:
-    # GPT-4を使用してダジャレを生成
-    generator = ImageGenerator()
-    # お庭のレベルを決定（例として貢献数に基づく）
-    garden_level = min(last_contribution_count, 5)
-    garden_prompt = GardenPrompts.get_prompt(garden_level)
-    
-    image_url = generator.generate_image(garden_prompt, date)
-    
-    return image_url
+class GardenApp:
+    def __init__(self):
+        logger.info("Initializing GardenApp")
+        self.result_image_url = None
+        self.current_image_path = None
+        self.image_generator = ImageGenerator()
 
+    def generate_garden(self, last_contribution_count, date) -> str:
+        logger.info(f"Generating garden for date: {date} with contribution count: {last_contribution_count}")
+        garden_level = min(last_contribution_count, 5)
+        garden_prompt = GardenPrompts.get_prompt(garden_level)
+        logger.debug(f"Using garden prompt for level {garden_level}")
+        image_url = self.image_generator.generate_image(garden_prompt, date)
+        return image_url
 
-def main(page: ft.Page):
-    # ページ設定
-    page.title = "Github_garden"
-    page.window.width = 400
-    page.window.height = 600  # 高さを増加
-    page.padding = 20
-    
-    # UIコンポーネント
-    title = ft.Text("今日のGithubのお庭", size=24, weight=ft.FontWeight.BOLD)
-    
-    # 初期状態では画像コンポーネントは作成しない
-    image_container = ft.Container(height=200)  # 画像用のプレースホルダー
+    def build_ui(self, page: ft.Page):
+        logger.info("Building UI components")
+        # ページ設定
+        page.title = "AIお庭ジェネレーター"
+        page.window.width = 400
+        page.window.height = 500
+        page.padding = 20
+        
+        # UIコンポーネント
+        self.title = ft.Text("AIお庭ジェネレーター", size=24, weight=ft.FontWeight.BOLD)
+        self.image_container = ft.Container(height=200)
+        
+        self.generate_btn = ft.ElevatedButton(
+            text="お庭生成",
+            width=360,
+            on_click=self.generate_clicked
+        )
+        
+        self.share_btn = ft.ElevatedButton(
+            text="Xでシェア",
+            width=360,
+            on_click=self.share_clicked,
+            disabled=True
+        )
 
-    # 追加: 日付と画像レベルを表示するテキストフィールド
-    info_text = ft.Text(value="", size=14, color="gray")
-    
-    result_text = ft.TextField(
-        label="生成結果",
-        read_only=True,
-        multiline=True,
-        min_lines=2,
-        width=360
-    )
-    
-    # result_imageをグローバルスコープで定義
-    result_image = None
-    
-    # 画像パスを保持する変数を追加
-    current_image_path = None
-    
-    # 追加: dateとgarden_levelを初期化
-    date = ""
-    garden_level = 0
-    
-    # 画像生成処理
-    def generate_clicked(e):
-        nonlocal result_image
-        nonlocal current_image_path
-        nonlocal date
-        nonlocal garden_level
-        print("画像生成ボタンがクリックされました")  # デバッグログ
-        generate_btn.disabled = True
-        generate_btn.text = "生成中..."
-        page.update()
+        # レイアウトの構築
+        page.add(
+            ft.Column(
+                controls=[
+                    self.title,
+                    ft.Container(height=20),
+                    self.generate_btn,
+                    ft.Container(height=20),
+                    self.image_container,
+                    ft.Container(height=20),
+                    self.share_btn
+                ],
+                spacing=0,
+                alignment=ft.MainAxisAlignment.START
+            )
+        )
+        logger.info("UI components built successfully")
+
+    def generate_clicked(self, e):
+        logger.info("Generate button clicked")
+        self.generate_btn.disabled = True
+        self.generate_btn.text = "生成中..."
+        e.page.update()
         
         try:
-            print("GitHubの貢献情報を取得中...")  # デバッグログ
+            # GitHubの貢献情報を取得
+            logger.info("Fetching GitHub contributions")
             contributions: dict = get_github_contributions()
             last_contribution_count = int(contributions['data']['user']['contributionsCollection']['contributionCalendar']['weeks'][-1]['contributionDays'][-1]['contributionCount'])
             date = contributions['data']['user']['contributionsCollection']['contributionCalendar']['weeks'][-1]['contributionDays'][-1]['date']
-            print(f"最終貢献数: {last_contribution_count}, 日付: {date}")  # デバッグログ
+            logger.info(f"Retrieved contributions for date: {date}")
             
-            result_image_url = generate_garden(last_contribution_count, date)
-            print(f"生成された画像URL: {result_image_url}")  # デバッグログ
+            # 画像を生成
+            self.result_image_url = self.generate_garden(last_contribution_count, date)
+            logger.info("Image generated successfully")
             
             # 生成された画像のローカルパスを作成
-            image_path = os.path.join(os.path.dirname(__file__), "images", f"generated_image_{date}.png")
-            current_image_path = image_path  # パスを保存
+            current_path = os.path.dirname(os.path.abspath(__file__))
+            self.current_image_path = os.path.join(current_path, f"images/generated_image_{date}.png")
+            logger.debug(f"Image path: {self.current_image_path}")
             
             new_image = ft.Image(
-                src=image_path,
+                src=self.current_image_path,
                 width=360,
                 height=200,
                 fit=ft.ImageFit.CONTAIN
             )
             
-            image_container.content = new_image
-            page.update()
+            # コンテナの中身を更新
+            self.image_container.content = new_image
+            self.share_btn.disabled = False
+            logger.info("UI updated with new image")
             
-            result_image = result_image_url
-            share_btn.disabled = False
-            
-            # 情報テキストの更新
-            garden_level = min(last_contribution_count, 5)
-            info_text.value = f"日付: {date} | 画像レベル: {garden_level}"
-            
-            # おめでとうメッセージの追加
-            congratulations = ft.Text(
-                value="おめでとうございます！\n今日もお疲れさまでした。",
-                size=16,
-                color="green",
-                weight=ft.FontWeight.BOLD
-            )
-            page.controls.append(congratulations)
-            page.update()
-            
-            print("画像生成完了")  # デバッグログ
         except Exception as err:
-            result_text.value = f"エラーが発生しました: {str(err)}"
-            result_image = None
-            current_image_path = None
-            print(f"��ラー: {str(err)}")  # デバッグログ
+            logger.error(f"Error generating garden: {str(err)}", exc_info=True)
+            self.result_image_url = None
+            self.current_image_path = None
+            
         finally:
-            generate_btn.disabled = False
-            generate_btn.text = "お庭を生成"
-            page.update()
+            self.generate_btn.disabled = False
+            self.generate_btn.text = "お庭を生成"
+            e.page.update()
+            logger.info("Generate button restored to initial state")
 
-    # Xでシェア
-    def share_clicked(e):
-        if current_image_path:
-            # URLエンコードを使用して日本語テキストを適切に処理
-            tweet_text = urllib.parse.quote(
-                f"【今日のお庭】\n\n日付: {date}\n画像レベル: {garden_level}\nGitHubの今日のお庭です:\n#GitHubお庭 #AIお庭ジェネレーター \n\n{result_image}"
-            )
+    def share_clicked(self, e):
+        logger.info("Share button clicked")
+        if self.current_image_path:
+            tweet_text = urllib.parse.quote(f"【今日のお庭】\n\nGitHubの今日のお庭です:\n#GitHubお庭 #AIお庭ジェネレーター \n\n{self.result_image_url}")
             url = f"https://twitter.com/intent/tweet?text={tweet_text}"
             webbrowser.open(url)
+            logger.info("Opened share URL in browser")
+        else:
+            logger.warning("Share attempted but no image path available")
 
-    # ボタンの作成
-    generate_btn = ft.ElevatedButton(
-        text="お庭生成",
-        width=360,
-        on_click=generate_clicked
-    )
-    
-    share_btn = ft.ElevatedButton(
-        text="Xでシェア",
-        width=360,
-        on_click=share_clicked,
-        disabled=True  # 初期状態は無効
-    )
-
-    # レイアウトの構築
-    page.add(
-        ft.Column(
-            controls=[
-                title,
-                ft.Container(height=20),
-                generate_btn,
-                ft.Container(height=20),
-                image_container,  # 画像コンテナを追加
-                ft.Container(height=10),
-                info_text,  # 追加: 情報テキストを追加
-                ft.Container(height=20),
-                share_btn
-            ],
-            spacing=0,
-            alignment=ft.MainAxisAlignment.START
-        )
-    )
+def main(page: ft.Page):
+    logger.info("Starting application")
+    app = GardenApp()
+    app.build_ui(page)
 
 if __name__ == '__main__':
     ft.app(target=main)
